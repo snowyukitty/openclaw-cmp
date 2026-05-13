@@ -1,12 +1,14 @@
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { managedBrowserHelpText } from "../../skills/_shared/compat.js";
 
-const OPENCLAW_DIR = path.join(os.homedir(), ".openclaw");
-const SKILL_DIR = path.join(OPENCLAW_DIR, "skills", "cmp");
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const OPENCLAW_DIR = process.env.OPENCLAW_HOME || path.join(os.homedir(), ".openclaw");
+const SKILL_DIR = resolveCmpSkillDir();
 const CONFIG_PATH = path.join(SKILL_DIR, "config", "platforms.json");
 const OPENCLAW_CONFIG_PATH = path.join(OPENCLAW_DIR, "openclaw.json");
 const AUTH_PROFILES_PATH = path.join(OPENCLAW_DIR, "agents", "main", "agent", "auth-profiles.json");
@@ -43,6 +45,14 @@ let browserControlServerBootPromise = null;
 let cmpAgentRuntime = null;
 let cmpCoreConfig = null;
 let copilotTokenResolverPromise = null;
+
+function resolveCmpSkillDir() {
+  const override = process.env.CMP_SKILL_DIR;
+  if (override) return override;
+  const adjacent = path.resolve(MODULE_DIR, "../../skills/cmp");
+  if (fsSync.existsSync(adjacent)) return adjacent;
+  return path.join(OPENCLAW_DIR, "skills", "cmp");
+}
 
 const plugin = {
   id: "cmp",
@@ -689,6 +699,7 @@ async function sendPromptToPlatform(platformKey, cfg, question, locale, runLog) 
         platform: platformKey,
         name: cfg.name,
         targetId,
+        url: cfg.new_chat_url,
         status: "sent",
         completion: "pending",
         responseText: "",
@@ -710,7 +721,7 @@ async function installCompletionDetectors(active, runLog) {
   const detector = await fs.readFile(DETECT_SCRIPT, "utf8");
   for (const entry of active) {
     try {
-      await focusTab(entry.targetId);
+      await focusActiveEntry(entry, runLog);
       await runCommand("openclaw", ["browser", "evaluate", "--fn", detector, "--json"], {
         json: true,
         timeoutMs: 20000
@@ -732,7 +743,31 @@ async function waitForCompletion(active, runLog) {
     for (const entry of active) {
       if (entry.completion !== "pending") continue;
       try {
-        await focusTab(entry.targetId);
+        await focusActiveEntry(entry, runLog);
+        if (entry.platform === "chatgpt") {
+          const completion = await checkChatGPTCompletion(entry.promptText || entry.question, history.get(entry.platform));
+          history.set(entry.platform, completion);
+          addRunStep(runLog, entry.platform, {
+            step: "wait_complete",
+            ok: completion.done,
+            platformCheck: true,
+            details: completion
+          });
+          traceRun(runLog, "platform_completion_probe", {
+            platform: entry.platform,
+            elapsedMs: Date.now() - waitStartedAt,
+            ...completion
+          });
+          if (completion.done) {
+            entry.completion = "done";
+            traceRun(runLog, "response_complete", {
+              platform: entry.platform,
+              method: "chatgpt_probe",
+              elapsedMs: Date.now() - waitStartedAt
+            });
+          }
+          continue;
+        }
         if (entry.platform === "gemini") {
           const completion = await checkGeminiCompletion(entry.promptText || entry.question, history.get(entry.platform));
           history.set(entry.platform, completion);
@@ -818,7 +853,7 @@ async function waitForCompletionFallback(active, runLog) {
   while (Date.now() < deadline && active.some((entry) => entry.completion === "pending")) {
     for (const entry of active) {
       if (entry.completion !== "pending") continue;
-      await focusTab(entry.targetId);
+      await focusActiveEntry(entry, runLog);
       const snapshot = await snapshotPage();
       const textLength = snapshot.snapshot.length;
       const prev = history.get(entry.platform) || { last: -1, stable: 0 };
@@ -859,7 +894,7 @@ async function collectResponses(active, evaluateEnabled, question, runLog) {
   const extractor = evaluateEnabled ? await fs.readFile(EXTRACT_SCRIPT, "utf8") : null;
   for (const entry of active) {
     try {
-      await focusTab(entry.targetId);
+      await focusActiveEntry(entry, runLog);
       await delay(1500);
       let extracted = await extractPlatformResponse(entry.platform, question, evaluateEnabled, extractor, runLog);
       if (extracted.text && (needsMoreResponseDepth(entry.platform, extracted.text, question) || looksLikeTruncatedExtraction(extracted.text))) {
@@ -973,6 +1008,7 @@ async function aggregatePlatformResponses(question, locale, active, platformLogs
 async function closeActiveTabs(active, runLog) {
   for (const entry of active) {
     try {
+      entry.targetId = await recoverTargetId(entry, runLog);
       await runCommand("openclaw", ["browser", "close", entry.targetId, "--json"], {
         json: true,
         timeoutMs: 10000
@@ -1002,6 +1038,32 @@ async function focusTab(targetId) {
     }
   }
   throw lastError;
+}
+
+async function focusActiveEntry(entry, runLog) {
+  try {
+    await focusTab(entry.targetId);
+  } catch (error) {
+    const recoveredTargetId = await recoverTargetId(entry, runLog);
+    if (!recoveredTargetId || recoveredTargetId === entry.targetId) {
+      throw error;
+    }
+    entry.targetId = recoveredTargetId;
+    await focusTab(entry.targetId);
+  }
+}
+
+async function recoverTargetId(entry, runLog) {
+  if (!entry?.targetId) return entry?.targetId || null;
+  const recovered = await resolveOpenedTargetId(entry.targetId, entry.url || "", runLog, entry.platform).catch(() => entry.targetId);
+  if (recovered && recovered !== entry.targetId) {
+    traceRun(runLog, "platform_target_refresh", {
+      platform: entry.platform,
+      previousTargetId: entry.targetId,
+      nextTargetId: recovered
+    });
+  }
+  return recovered || entry.targetId;
 }
 
 async function resolveOpenedTargetId(targetId, expectedUrl, runLog, platformKey) {
@@ -1160,17 +1222,31 @@ async function clickSendViaDom() {
   return result.result;
 }
 
+async function checkChatGPTCompletion(question, previous = null) {
+  const result = await runCommand("openclaw", ["browser", "evaluate", "--fn", buildChatGPTCompletionCheckFn(question), "--json"], {
+    json: true,
+    timeoutMs: 12000
+  });
+  const probe = result?.result || { hasStop: false, hasResponse: false, length: 0, composerHasPrompt: false };
+  const stable = previous && previous.length === probe.length ? (previous.stable || 0) + 1 : 0;
+  return {
+    ...probe,
+    stable,
+    done: Boolean(probe.hasResponse && !probe.hasStop && !probe.composerHasPrompt) && stable >= COMPLETION_STABLE_POLLS
+  };
+}
+
 async function checkGeminiCompletion(question, previous = null) {
   const result = await runCommand("openclaw", ["browser", "evaluate", "--fn", buildGeminiCompletionCheckFn(question), "--json"], {
     json: true,
     timeoutMs: 12000
   });
-  const probe = result?.result || { hasStop: false, hasResponse: false, length: 0 };
+  const probe = result?.result || { hasStop: false, hasResponse: false, length: 0, composerHasPrompt: false };
   const stable = previous && previous.length === probe.length ? (previous.stable || 0) + 1 : 0;
   return {
     ...probe,
     stable,
-    done: Boolean(probe.questionObserved && probe.hasResponse && !probe.hasStop) && stable >= COMPLETION_STABLE_POLLS
+    done: Boolean(probe.hasResponse && !probe.hasStop && !probe.composerHasPrompt) && stable >= COMPLETION_STABLE_POLLS
   };
 }
 
@@ -1379,6 +1455,19 @@ async function extractPlatformResponse(platformKey, question, evaluateEnabled, e
     });
     return { source, validation };
   };
+
+  if (platformKey === "chatgpt") {
+    const chatgptPrimary = await tryCandidate("chatgpt_primary", buildChatGPTExtractFn(question));
+    if (chatgptPrimary.validation.ok && !needsMoreResponseDepth(platformKey, chatgptPrimary.validation.text, question)) {
+      return { text: chatgptPrimary.validation.text, source: chatgptPrimary.source };
+    }
+    if (chatgptPrimary.validation.ok) {
+      traceRun(runLog, "response_retry_wait", { platform: platformKey, source: "chatgpt_primary", reason: "thin_response" });
+      await delay(3000);
+      const chatgptRetry = await tryCandidate("chatgpt_retry", buildChatGPTExtractFn(question));
+      if (chatgptRetry.validation.ok) return { text: chatgptRetry.validation.text, source: chatgptRetry.source };
+    }
+  }
 
   if (platformKey === "gemini") {
     const geminiPrimary = await tryCandidate("gemini_primary", buildGeminiExtractFn(question, false));
@@ -1653,12 +1742,15 @@ function buildChatGPTSubmissionVerifyFn(question) {
       }) || (body.includes(text) && !composerHasPrompt);
     const hasStop = Array.from(document.querySelectorAll("button")).some((el) => ((el.getAttribute("aria-label") || "") + " " + (el.innerText || "")).toLowerCase().includes("stop"));
     const hasAssistant = document.querySelectorAll('[data-message-author-role="assistant"]').length > 0;
+    const conversationStarted = hasStop || hasAssistant || !composerHasPrompt;
     return {
-      ok: questionObserved && (hasStop || hasAssistant || !composerHasPrompt),
+      ok: conversationStarted && (questionObserved || !composerHasPrompt),
       hasStop,
       hasAssistant,
       composerHasPrompt,
-      questionObserved
+      questionObserved,
+      conversationStarted,
+      reason: conversationStarted ? "conversation_started" : "chatgpt_submission_not_observed"
     };
   }`;
 }
@@ -1716,15 +1808,17 @@ function buildGeminiSubmissionVerifyFn(question) {
       const r = el.getBoundingClientRect();
       return r.width > 500 && r.height > 60 && t.length > 30 && !/where should we start|deep research/i.test(t);
     });
+    const conversationStarted = pathStarted || hasGeminiSaid || hasResponse || !composerHasPrompt;
     return {
-      ok: questionObserved && (pathStarted || hasGeminiSaid || hasResponse || !composerHasPrompt),
+      ok: conversationStarted && (questionObserved || hasResponse || !composerHasPrompt),
       pathStarted,
       hasPrompt,
       composerHasPrompt,
       questionObserved,
       hasGeminiSaid,
       hasResponse,
-      reason: questionObserved ? "conversation_started" : "gemini_submission_not_observed"
+      conversationStarted,
+      reason: conversationStarted ? "conversation_started" : "gemini_submission_not_observed"
     };
   }`;
 }
@@ -1781,7 +1875,7 @@ function buildGeminiExtractFn(question, retry) {
         const value = normalize(el.innerText || el.textContent || "");
         return value === text || value.includes(text);
       }) || ((document.body?.innerText || "").includes(text) && !composerHasPrompt);
-    if (!questionObserved) return { text: "" };
+    if (!questionObserved && composerHasPrompt) return { text: "" };
     const bad = (value) => /deep research browses the open web|where should we start|create image|create music|boost my day|help me learn|upgrade to google ai ultra|try deep research today|show thinking|refining .* answer now|prioritizing .* answer now|defining response logic answer now|analyzing the inquiry answer now|ranking .* answer now|drafting response/i.test(value);
     const selectors = retry
       ? [".response-content .markdown", ".response-content", ".response-container-content", ".markdown-main-panel", ".presented-response-container"]
@@ -1800,6 +1894,56 @@ function buildGeminiExtractFn(question, retry) {
         if (rect.left > window.innerWidth * 0.18) score += 30;
         if (rect.width > window.innerWidth * 0.45) score += 20;
         if (/Gemini said/i.test(raw)) score += 20;
+        candidates.push({ text: cleaned, selector, score });
+      }
+    }
+    candidates.sort((a, b) => b.score - a.score);
+    if (!candidates.length) return { text: "" };
+    return { text: candidates[0].text, selector: candidates[0].selector, score: candidates[0].score };
+  }`;
+}
+
+function buildChatGPTExtractFn(question) {
+  return `() => {
+    const text = ${JSON.stringify(question)};
+    const normalize = (value) => String(value || "").replace(/\\s+/g, " ").trim();
+    const visible = (el) => {
+      if (!el) return false;
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 240 && rect.height > 24;
+    };
+    const clean = (value) => String(value || "")
+      .replace(/\\u00a0/g, " ")
+      .replace(/^ChatGPT said:\\s*/i, "")
+      .replace(/\\bChatGPT can make mistakes\\.?[\\s\\S]*$/i, "")
+      .trim();
+    const composerNodes = Array.from(document.querySelectorAll('textarea, [contenteditable="true"], [role="textbox"]')).filter((el) => visible(el));
+    const composerText = normalize(composerNodes.map((el) => el.value || el.innerText || el.textContent || "").join(" "));
+    const composerHasPrompt = composerText.includes(text);
+    const questionObserved = Array.from(document.querySelectorAll('[data-message-author-role="user"], article, main div, section div'))
+      .some((el) => {
+        if (!visible(el)) return false;
+        const value = normalize(el.innerText || el.textContent || "");
+        return value === text || value.includes(text);
+      }) || ((document.body?.innerText || "").includes(text) && !composerHasPrompt);
+    if (!questionObserved && composerHasPrompt) return { text: "" };
+    const selectors = ['[data-message-author-role="assistant"]', 'article .markdown', 'main article', 'article'];
+    const candidates = [];
+    for (const selector of selectors) {
+      for (const el of Array.from(document.querySelectorAll(selector))) {
+        if (!visible(el)) continue;
+        const rect = el.getBoundingClientRect();
+        const raw = String(el.innerText || "").trim();
+        const cleaned = clean(raw);
+        if (!cleaned || cleaned === text) continue;
+        if (/new chat|search chats|library|sora|gpts|voice/i.test(cleaned) && cleaned.length < 250) continue;
+        let score = cleaned.length;
+        if (selector.includes('data-message-author-role="assistant"')) score += 220;
+        if (selector.includes(".markdown")) score += 80;
+        if (rect.left > window.innerWidth * 0.15) score += 25;
+        if (rect.width > window.innerWidth * 0.45) score += 20;
+        if (!cleaned.includes(text)) score += 30;
         candidates.push({ text: cleaned, selector, score });
       }
     }
@@ -1836,8 +1980,45 @@ function buildGeminiCompletionCheckFn(question) {
     const best = texts.sort((a, b) => b.length - a.length)[0] || "";
     return {
       hasStop,
+      composerHasPrompt,
       questionObserved,
       hasResponse: best.length > 24,
+      length: best.length
+    };
+  }`;
+}
+
+function buildChatGPTCompletionCheckFn(question) {
+  return `() => {
+    const text = ${JSON.stringify(question)};
+    const normalize = (value) => String(value || "").replace(/\\s+/g, " ").trim();
+    const visible = (el) => {
+      if (!el) return false;
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 40 && rect.height > 18;
+    };
+    const buttons = Array.from(document.querySelectorAll("button"));
+    const hasStop = buttons.some((el) => ((el.getAttribute("aria-label") || "") + " " + (el.innerText || "")).toLowerCase().includes("stop"));
+    const composerNodes = Array.from(document.querySelectorAll('textarea, [contenteditable="true"], [role="textbox"]')).filter((el) => visible(el));
+    const composerText = normalize(composerNodes.map((el) => el.value || el.innerText || el.textContent || "").join(" "));
+    const composerHasPrompt = composerText.includes(text);
+    const questionObserved = Array.from(document.querySelectorAll('[data-message-author-role="user"], article, main div, section div'))
+      .some((el) => {
+        if (!visible(el)) return false;
+        const value = normalize(el.innerText || el.textContent || "");
+        return value === text || value.includes(text);
+      }) || ((document.body?.innerText || "").includes(text) && !composerHasPrompt);
+    const texts = Array.from(document.querySelectorAll('[data-message-author-role="assistant"], article .markdown, main article, article'))
+      .filter((el) => visible(el))
+      .map((el) => normalize(el.innerText || ""))
+      .filter((value) => value.length > 40 && !/new chat|search chats|library|sora|gpts|voice/i.test(value));
+    const best = texts.sort((a, b) => b.length - a.length)[0] || "";
+    return {
+      hasStop,
+      composerHasPrompt,
+      questionObserved,
+      hasResponse: best.length > 80,
       length: best.length
     };
   }`;

@@ -1,12 +1,12 @@
 {
   "chatgpt": {
     "name": "ChatGPT",
-    "new_chat_url": "https://chatgpt.com",
+    "new_chat_url": "https://chatgpt.com/?temporary-chat=true",
     "input_hint": "The main large textarea or contenteditable at the bottom of the page, typically with placeholder text like 'Message ChatGPT' or 'Ask anything'. This is the primary chat input.",
     "send_hint": "The send or submit button immediately adjacent to the input area. It is often an arrow or paper-plane icon and may only enable after text is entered.",
     "response_container_hint": "The last assistant message block in the conversation. Use the most recent message that is not from the user.",
     "completion_signals": "Stop button disappears, copy or regenerate controls appear, and the input becomes active again.",
-    "notes": "React-controlled input. If send remains disabled after fill, click the input once, re-snapshot, and try again."
+    "notes": "React-controlled input. Open a temporary chat to avoid stale conversation context. If send remains disabled after fill, click the input once, re-snapshot, and try again."
   },
   "claude": {
     "name": "Claude",

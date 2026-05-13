@@ -35,9 +35,21 @@ tests/
 npm test
 ```
 
+Run several real CMP questions against the local OpenClaw install:
+
+```bash
+npm run test:live
+```
+
 ## Install into OpenClaw
 
-Copy:
+Use:
+
+```bash
+npm run install:local
+```
+
+Or copy manually:
 - `extensions/cmp` -> `~/.openclaw/extensions/cmp`
 - `skills/cmp` -> `~/.openclaw/skills/cmp`
 
@@ -46,3 +58,10 @@ Then restart the gateway:
 ```bash
 openclaw gateway restart
 ```
+
+## Publish readiness
+
+Before pushing to GitHub:
+- confirm `npm test` passes
+- optionally run `npm run test:live`
+- verify no local logs or secrets were copied into the repo

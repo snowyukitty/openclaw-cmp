@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests/cmp-smoke.mjs"
+    "test": "node tests/cmp-smoke.mjs",
+    "test:live": "node scripts/live-sample-questions.mjs",
+    "install:local": "sh scripts/install-local.sh"
   }
 }
