@@ -1,0 +1,10 @@
+{
+  "id": "cmp",
+  "name": "CMP",
+  "description": "Deterministic command handler for the cmp multi-AI browser skill.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

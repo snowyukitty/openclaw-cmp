@@ -1,0 +1,38 @@
+{
+  "chatgpt": {
+    "name": "ChatGPT",
+    "new_chat_url": "https://chatgpt.com",
+    "input_hint": "The main large textarea or contenteditable at the bottom of the page, typically with placeholder text like 'Message ChatGPT' or 'Ask anything'. This is the primary chat input.",
+    "send_hint": "The send or submit button immediately adjacent to the input area. It is often an arrow or paper-plane icon and may only enable after text is entered.",
+    "response_container_hint": "The last assistant message block in the conversation. Use the most recent message that is not from the user.",
+    "completion_signals": "Stop button disappears, copy or regenerate controls appear, and the input becomes active again.",
+    "notes": "React-controlled input. If send remains disabled after fill, click the input once, re-snapshot, and try again."
+  },
+  "claude": {
+    "name": "Claude",
+    "new_chat_url": "https://claude.ai/new",
+    "input_hint": "A contenteditable chat input near the bottom of the page, often with placeholder text like 'How can Claude help you today?' or similar.",
+    "send_hint": "A small arrow or send button to the right of or below the input that becomes active after text is entered.",
+    "response_container_hint": "The last Claude assistant message in the conversation, not the user's message.",
+    "completion_signals": "Streaming cursor stops, action buttons such as Copy or Retry appear, and the input becomes active again.",
+    "notes": "Uses contenteditable elements. Always use /new for a fresh conversation."
+  },
+  "gemini": {
+    "name": "Gemini",
+    "new_chat_url": "https://gemini.google.com/app",
+    "input_hint": "The main input at the bottom, which may be a rich textarea or contenteditable editor, usually with placeholder text like 'Ask Gemini'.",
+    "send_hint": "A circular send button with an arrow icon adjacent to the main input area.",
+    "response_container_hint": "The latest non-user response block in the main conversation area.",
+    "completion_signals": "Streaming stops, text stabilizes, and response action buttons appear below the answer.",
+    "notes": "The UI changes frequently. If multiple inputs exist, choose the prominent bottom composer."
+  },
+  "grok": {
+    "name": "Grok",
+    "new_chat_url": "https://grok.com/",
+    "input_hint": "A textarea or text input at the bottom of the chat interface with placeholder text about asking Grok a question.",
+    "send_hint": "A nearby submit button with an arrow or send icon.",
+    "response_container_hint": "The most recent assistant or bot message block in the conversation.",
+    "completion_signals": "Response text stops growing, the input becomes active again, and action buttons appear.",
+    "notes": "Requires an active X or Twitter session in the managed browser."
+  }
+}

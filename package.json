@@ -1,0 +1,8 @@
+{
+  "name": "openclaw-cmp",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/cmp-smoke.mjs"
+  }
+}

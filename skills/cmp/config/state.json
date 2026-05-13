@@ -1,0 +1,6 @@
+{
+  "chatgpt": true,
+  "claude": true,
+  "gemini": true,
+  "grok": false
+}
