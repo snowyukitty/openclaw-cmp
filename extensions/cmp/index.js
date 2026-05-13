@@ -2428,6 +2428,13 @@ function renderComparisonReport(question, locale, aggregation, synthesis, option
   lines.push(question);
   lines.push("");
   lines.push(`**${localize(locale, {
+    zh: "Best Combined Answer",
+    ja: "Best Combined Answer",
+    en: "Best Combined Answer"
+  })}**`);
+  lines.push(compact ? summarizeMarkdownForTransport(synthesis.directAnswer, tighter ? 700 : 1100) : synthesis.directAnswer);
+  lines.push("");
+  lines.push(`**${localize(locale, {
     zh: "Consensus",
     ja: "Consensus",
     en: "Consensus"
@@ -2447,13 +2454,6 @@ function renderComparisonReport(question, locale, aggregation, synthesis, option
     en: "Unique Additions"
   })}**`);
   for (const item of limitListByMode(synthesis.uniqueAdditions || [], compact, tighter)) lines.push(`- ${item}`);
-  lines.push("");
-  lines.push(`**${localize(locale, {
-    zh: "Best Combined Answer",
-    ja: "Best Combined Answer",
-    en: "Best Combined Answer"
-  })}**`);
-  lines.push(compact ? summarizeMarkdownForTransport(synthesis.directAnswer, tighter ? 700 : 1100) : synthesis.directAnswer);
   lines.push("");
 
   const visiblePlatformBlocks = [];
@@ -2547,8 +2547,11 @@ function renderUltraCompactComparisonReport(question, locale, aggregation, synth
       en: "🔄 Multi-AI Answer Comparison"
     }),
     "",
-    `**${localize(locale, { zh: "Consensus", ja: "Consensus", en: "Consensus" })}**`
+    `**${localize(locale, { zh: "Best Combined Answer", ja: "Best Combined Answer", en: "Best Combined Answer" })}**`
   ];
+  lines.push(summarizeMarkdownForTransport(synthesis.directAnswer, Math.max(450, limit - 650)));
+  lines.push("");
+  lines.push(`**${localize(locale, { zh: "Consensus", ja: "Consensus", en: "Consensus" })}**`);
   for (const item of limitListByMode(synthesis.consensus || [], true, true)) lines.push(`- ${item}`);
   lines.push("");
   lines.push(`**${localize(locale, { zh: "Major Differences", ja: "Major Differences", en: "Major Differences" })}**`);
@@ -2556,9 +2559,6 @@ function renderUltraCompactComparisonReport(question, locale, aggregation, synth
   lines.push("");
   lines.push(`**${localize(locale, { zh: "Unique Additions", ja: "Unique Additions", en: "Unique Additions" })}**`);
   for (const item of limitListByMode(synthesis.uniqueAdditions || [], true, true)) lines.push(`- ${item}`);
-  lines.push("");
-  lines.push(`**${localize(locale, { zh: "Best Combined Answer", ja: "Best Combined Answer", en: "Best Combined Answer" })}**`);
-  lines.push(summarizeMarkdownForTransport(synthesis.directAnswer, Math.max(450, limit - 650)));
   lines.push("");
   lines.push(localize(locale, {
     zh: `狀態：${aggregation.usable.map((entry) => entry.name || entry.platform).join(" · ")}`,
@@ -3343,6 +3343,7 @@ function buildSynthesisAgentPrompt(locale) {
   return localize(locale, {
     zh: [
       "你是 CMP 的 agent synthesis layer。你現在要把多個 AI 平台對同一問題的完整回答做高品質整合。",
+      "若問題是中文，全部內容請使用繁體中文，不要使用簡體中文。",
       "你只輸出合法 JSON，不要輸出 markdown fence，也不要輸出任何額外說明。",
       "JSON 結構必須是：",
       '{ "platformViews": { "<platform>": { "summary": string, "keyPoints": string[], "caveats": string } }, "consensus": string[], "majorDifferences": string[], "uniqueAdditions": string[], "directAnswer": string }',
@@ -3387,6 +3388,7 @@ function buildPlatformSummaryAgentPrompt(locale) {
   return localize(locale, {
     zh: [
       "你要把單一平台的回答整理成可讀、可信、非截斷式的摘要。",
+      "若問題是中文，全部內容請使用繁體中文，不要使用簡體中文。",
       "只輸出 JSON：{\"summary\": string, \"keyPoints\": string[], \"caveats\": string}",
       "summary 要是 2-4 句歸納摘要。",
       "keyPoints 最多 3 點，保留真正重要的結論、依據、前提或例子。",
@@ -3459,6 +3461,7 @@ function buildSynthesisSystemPrompt(locale) {
   return localize(locale, {
     zh: [
       "你是 cmp 的最終整合層。你會看到同一個使用者問題，以及多個 AI 平台對這個問題的已清理答案。",
+      "若問題是中文，全部內容請使用繁體中文，不要使用簡體中文。",
       "你的任務不是評價哪個模型更好，而是比較這些答案本身，並幫使用者得到更完整、更平衡的答案。",
       "你會另外看到不可用平台的簡短失敗資訊。那些資訊只能用於安靜地交代缺席來源，不能主導主文。",
       "請只輸出 JSON，不要加 markdown、程式碼區塊或額外說明。",
