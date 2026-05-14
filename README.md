@@ -2,10 +2,7 @@
 
 Multi-AI comparison workflow for OpenClaw.
 
-Languages:
-- English: this page
-- 繁體中文: [docs/README.zh-Hant.md](docs/README.zh-Hant.md)
-- 日本語: [docs/README.ja.md](docs/README.ja.md)
+**Languages:** **English** | [繁體中文](docs/README.zh-Hant.md) | [日本語](docs/README.ja.md)
 
 ## Overview
 

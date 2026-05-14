@@ -2,6 +2,8 @@
 
 OpenClaw 的多 AI 比較工作流。
 
+**語言：** [English](../README.md) | **繁體中文** | [日本語](README.ja.md)
+
 ## 概要
 
 OpenClaw CMP 會把 `/cmp` 註冊成真正的 OpenClaw 指令，並對多個瀏覽器驅動的 AI 平台做答案比較與整合。

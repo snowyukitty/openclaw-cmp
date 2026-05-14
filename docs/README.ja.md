@@ -2,6 +2,8 @@
 
 OpenClaw 向けのマルチ AI 比較ワークフローです。
 
+**言語:** [English](../README.md) | [繁體中文](README.zh-Hant.md) | **日本語**
+
 ## 概要
 
 OpenClaw CMP は `/cmp` を実際の OpenClaw コマンドとして登録し、複数のブラウザ駆動 AI プラットフォームの回答を比較・統合します。
