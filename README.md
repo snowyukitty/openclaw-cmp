@@ -2,66 +2,87 @@
 
 Multi-AI comparison workflow for OpenClaw.
 
-This package contains:
-- `extensions/cmp`: the live CMP plugin command implementation
-- `skills/cmp`: the CMP runbook, scripts, config, and references
+Languages:
+- English: this page
+- 繁體中文: [docs/README.zh-Hant.md](docs/README.zh-Hant.md)
+- 日本語: [docs/README.ja.md](docs/README.ja.md)
 
-## What CMP does
+## Overview
+
+OpenClaw CMP registers `/cmp` as a real OpenClaw command and compares answers across multiple browser-backed AI platforms.
+
+Current targets:
+- ChatGPT
+- Claude
+- Gemini
+
+Current output goals:
+- Best Combined Answer first
+- Real synthesis instead of placeholder completion text
+- Graceful degradation when one provider fails
+- Concise diagnostics for debugging
+
+## Features
 
 - Registers `/cmp` as a real OpenClaw command
-- Sends the same question to multiple browser-backed AI platforms
-- Waits for terminal completion on each platform
-- Extracts and validates each answer
-- Synthesizes a final comparison with an AI model
-- Preserves diagnostics when a provider or synthesis step fails
+- Sends the same question to multiple platforms
+- Waits for completion and extracts validated answers
+- Synthesizes a final comparison with an available model
+- Continues when one provider is unavailable
+- Preserves raw-answer diagnostics for debugging
+- Supports English, Japanese, and Traditional Chinese output flows
 
-## Current synthesis runtime
-
-- Primary synthesis provider: GitHub Copilot compatible endpoint
-- Primary model: `gpt-4o`
-- Fallback model: `gpt-5-mini`
-
-## Repo layout
+## Repo Layout
 
 ```text
 extensions/cmp/
 skills/cmp/
+skills/_shared/
+scripts/
 tests/
+docs/
 ```
 
-## Local validation
+## Install
+
+Install into a local OpenClaw setup:
+
+```bash
+npm run install:local
+openclaw gateway restart
+```
+
+Manual copy:
+- `extensions/cmp` -> `~/.openclaw/extensions/cmp`
+- `skills/cmp` -> `~/.openclaw/skills/cmp`
+- `skills/_shared` -> `~/.openclaw/skills/_shared`
+
+## Validation
+
+Smoke test:
 
 ```bash
 npm test
 ```
 
-Run several real CMP questions against the local OpenClaw install:
+Live local run:
 
 ```bash
 npm run test:live
 ```
 
-## Install into OpenClaw
+## Current Synthesis Runtime
 
-Use:
+- Primary provider: GitHub Copilot compatible endpoint
+- Primary model: `gpt-4o`
+- Fallback model: `gpt-5-mini`
 
-```bash
-npm run install:local
-```
+## Notes
 
-Or copy manually:
-- `extensions/cmp` -> `~/.openclaw/extensions/cmp`
-- `skills/cmp` -> `~/.openclaw/skills/cmp`
+- Claude may be partially limited on free accounts; CMP should continue with other successful providers.
+- For Chinese questions, synthesis is instructed to use Traditional Chinese rather than Simplified Chinese.
+- Browser-backed providers remain subject to UI drift and login/session constraints.
 
-Then restart the gateway:
+## License
 
-```bash
-openclaw gateway restart
-```
-
-## Publish readiness
-
-Before pushing to GitHub:
-- confirm `npm test` passes
-- optionally run `npm run test:live`
-- verify no local logs or secrets were copied into the repo
+[MIT](LICENSE)

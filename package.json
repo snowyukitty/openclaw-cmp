@@ -1,7 +1,27 @@
 {
   "name": "openclaw-cmp",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Multi-AI comparison workflow for OpenClaw with ChatGPT, Claude, and Gemini support.",
+  "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/snowyukitty/openclaw-cmp.git"
+  },
+  "homepage": "https://github.com/snowyukitty/openclaw-cmp",
+  "bugs": {
+    "url": "https://github.com/snowyukitty/openclaw-cmp/issues"
+  },
+  "keywords": [
+    "openclaw",
+    "cmp",
+    "chatgpt",
+    "claude",
+    "gemini",
+    "comparison",
+    "discord",
+    "telegram"
+  ],
   "scripts": {
     "test": "node tests/cmp-smoke.mjs",
     "test:live": "node scripts/live-sample-questions.mjs",
