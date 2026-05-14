@@ -99,6 +99,10 @@ npm run test:live
 - Primary model: `gpt-4o`
 - Fallback model: `gpt-5-mini`
 
+## Roadmap
+
+- Long-term CMP improvements are tracked in [TODO.md](TODO.md).
+
 ## Notes
 
 - Claude may be partially limited on free accounts; CMP should continue with other successful providers.
