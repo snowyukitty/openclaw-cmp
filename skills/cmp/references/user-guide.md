@@ -114,9 +114,18 @@ If `/cmp` runs but quality is wrong:
    - synthesis
 3. check whether a bad platform answer was rejected or leaked through
 
+## How Completion Waiting Works
+
+CMP does not rely on a fixed timer. Each platform is polled using a dedicated DOM probe until it reaches a terminal state (complete, timed out, or failed).
+
+For **Claude** specifically: Claude.ai navigates from `/new` to `/chat/<id>` after the prompt is submitted. This invalidates the browser tab reference stored at send time. CMP handles this by running a fresh DOM evaluation on every polling cycle — it checks for the stop/cancel button, streaming indicators (`data-is-streaming`, streaming cursor classes), whether the composer is empty, and whether the response text length is stable across multiple consecutive polls. A response is only considered complete once it has been stable for several polls in a row.
+
+This means CMP is designed to wait patiently. If a platform is still generating at the 2-minute mark, CMP will keep checking up to the 5-minute ceiling before timing out.
+
 ## Notes For Operators
 
 - Keep sessions logged in.
 - Ask one clear question per run.
 - If Gemini or Grok return noisy UI-like content, the runtime should reject it before synthesis.
 - If the final answer still looks stitched together, treat that as a regression in the synthesis pipeline, not as expected behavior.
+- If Claude consistently shows ❌, check `last-run.json` for `inject_detector` entries. They should now show `skipped: true` with reason `claude_uses_dedicated_probe`. If instead they show an error, you may be running an older version of the extension — re-run `npm run install:local`.

@@ -720,6 +720,13 @@ async function sendPromptToPlatform(platformKey, cfg, question, locale, runLog) 
 async function installCompletionDetectors(active, runLog) {
   const detector = await fs.readFile(DETECT_SCRIPT, "utf8");
   for (const entry of active) {
+    if (entry.platform === "claude") {
+      // Claude uses a dedicated per-poll DOM probe (checkClaudeCompletion) that does not
+      // depend on injected JS state. Injection would fail anyway because Claude navigates
+      // from /new to /chat/<id> on submission, invalidating the tab targetId.
+      addRunStep(runLog, entry.platform, { step: "inject_detector", ok: true, skipped: true, reason: "claude_uses_dedicated_probe" });
+      continue;
+    }
     try {
       await focusActiveEntry(entry, runLog);
       await runCommand("openclaw", ["browser", "evaluate", "--fn", detector, "--json"], {
@@ -811,6 +818,30 @@ async function waitForCompletion(active, runLog) {
             traceRun(runLog, "response_complete", {
               platform: entry.platform,
               method: "grok_probe",
+              elapsedMs: Date.now() - waitStartedAt
+            });
+          }
+          continue;
+        }
+        if (entry.platform === "claude") {
+          const completion = await checkClaudeCompletion(entry.promptText || entry.question, history.get(entry.platform));
+          history.set(entry.platform, completion);
+          addRunStep(runLog, entry.platform, {
+            step: "wait_complete",
+            ok: completion.done,
+            platformCheck: true,
+            details: completion
+          });
+          traceRun(runLog, "platform_completion_probe", {
+            platform: entry.platform,
+            elapsedMs: Date.now() - waitStartedAt,
+            ...completion
+          });
+          if (completion.done) {
+            entry.completion = "done";
+            traceRun(runLog, "response_complete", {
+              platform: entry.platform,
+              method: "claude_probe",
               elapsedMs: Date.now() - waitStartedAt
             });
           }
@@ -1264,6 +1295,20 @@ async function checkGrokCompletion(previous = null) {
   };
 }
 
+async function checkClaudeCompletion(question, previous = null) {
+  const result = await runCommand("openclaw", ["browser", "evaluate", "--fn", buildClaudeCompletionCheckFn(question), "--json"], {
+    json: true,
+    timeoutMs: 12000
+  });
+  const probe = result?.result || { hasStop: false, hasResponse: false, length: 0, composerHasPrompt: false };
+  const stable = previous && previous.length === probe.length ? (previous.stable || 0) + 1 : 0;
+  return {
+    ...probe,
+    stable,
+    done: Boolean(probe.hasResponse && !probe.hasStop && !probe.composerHasPrompt) && stable >= COMPLETION_STABLE_POLLS
+  };
+}
+
 async function confirmPromptSubmitted(question, inputRef) {
   await delay(800);
   if (!inputRef) return true;
@@ -1512,6 +1557,12 @@ async function extractPlatformResponse(platformKey, question, evaluateEnabled, e
     if (claudePrimary.validation.ok && !needsMoreResponseDepth(platformKey, claudePrimary.validation.text, question)) {
       return { text: claudePrimary.validation.text, source: claudePrimary.source };
     }
+    if (claudePrimary.validation.ok) {
+      traceRun(runLog, "response_retry_wait", { platform: platformKey, source: "claude_primary", reason: "thin_response" });
+      await delay(4000);
+      const claudeRetry = await tryCandidate("claude_retry", CLAUDE_EXTRACT_FN);
+      if (claudeRetry.validation.ok) return { text: claudeRetry.validation.text, source: claudeRetry.source };
+    }
   }
 
   if (evaluateEnabled && extractor) {
@@ -1665,7 +1716,11 @@ function cleanExtractedResponse(platformKey, rawText, question) {
     text = text
       .replace(/^Claude\s*/i, "")
       .replace(/^(Searched the web\s*)+/i, "")
-      .replace(/\bRetry\b.*$/s, "");
+      // Strip trailing UI chrome only at the very end of the extracted text.
+      // The previous dotAll /\bRetry\b.*$/s was dangerously broad: any response
+      // containing "retry" mid-sentence (e.g. "you can retry this...") would be
+      // silently truncated to that point.
+      .replace(/\s*\b(Retry|Copy|Continue|Regenerate)\s*$/i, "");
   } else if (platformKey === "grok") {
     text = text
       .replace(new RegExp(`^${escapeRegExp(question)}\\s*`, "i"), "")
@@ -1983,6 +2038,61 @@ function buildGeminiCompletionCheckFn(question) {
       composerHasPrompt,
       questionObserved,
       hasResponse: best.length > 24,
+      length: best.length
+    };
+  }`;
+}
+
+function buildClaudeCompletionCheckFn(question) {
+  return `() => {
+    const text = ${JSON.stringify(question)};
+    const normalize = (value) => String(value || "").replace(/\\s+/g, " ").trim();
+    const visible = (el) => {
+      if (!el) return false;
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 40 && rect.height > 18;
+    };
+    // Stop button: aria-label or text containing "stop" or "cancel", must be visible
+    const buttons = Array.from(document.querySelectorAll("button"));
+    const hasStopBtn = buttons.some((el) => {
+      const label = ((el.getAttribute("aria-label") || "") + " " + (el.innerText || "")).toLowerCase();
+      return (label.includes("stop") || label.includes("cancel")) && el.offsetParent !== null;
+    });
+    // Streaming DOM indicators: data-is-streaming attribute or streaming cursor/animation classes
+    const hasStreamingAttr = Boolean(
+      document.querySelector('[data-is-streaming="true"]') ||
+      document.querySelector('[class*="streaming-cursor"]') ||
+      document.querySelector('[class*="result-streaming"]') ||
+      document.querySelector('[class*="is-streaming"]')
+    );
+    const isStreaming = hasStopBtn || hasStreamingAttr;
+    // Composer: should be empty after Claude accepts the prompt
+    const composerNodes = Array.from(document.querySelectorAll('[contenteditable="true"], [role="textbox"]')).filter((el) => visible(el));
+    const composerText = normalize(composerNodes.map((el) => el.innerText || el.textContent || "").join(" "));
+    const composerHasPrompt = composerText.includes(text);
+    // URL signal: Claude navigates from /new to /chat/<id> after accepting submission
+    const urlChanged = /\\/chat\\//.test(location.pathname);
+    // Response text: try dedicated selectors first, fall back to heuristic blocks
+    const selectors = [
+      '[data-message-author-role="assistant"]',
+      '[class*="font-claude"]',
+      '[class*="assistant-message"]',
+      'article'
+    ];
+    let best = "";
+    for (const sel of selectors) {
+      const els = Array.from(document.querySelectorAll(sel)).filter((el) => visible(el));
+      if (els.length > 0) {
+        const t = normalize(els[els.length - 1].innerText || "");
+        if (t.length > best.length) best = t;
+      }
+    }
+    return {
+      hasStop: isStreaming,
+      composerHasPrompt,
+      urlChanged,
+      hasResponse: best.length > 80,
       length: best.length
     };
   }`;

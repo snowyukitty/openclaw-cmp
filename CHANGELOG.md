@@ -2,6 +2,20 @@
 
 All notable changes to `openclaw-cmp` will be documented in this file.
 
+## v0.2.0 - 2026-05-16
+
+### Fixed
+
+- **Claude always timing out (primary bug):** Claude.ai navigates from `/new` to `/chat/<id>` on prompt submission, which invalidates the browser targetId stored at send time. The old approach of injecting `window.__cmpDone` state into the tab failed silently every time because the tab reference was stale, so Claude always timed out at the 5-minute deadline and was reported as ❌.
+- **Replaced injected-state detection with a dedicated per-poll DOM probe for Claude** (`checkClaudeCompletion` + `buildClaudeCompletionCheckFn`), consistent with the ChatGPT and Gemini pattern. The probe evaluates Claude's DOM fresh on every polling cycle and never depends on previously-injected JS variables.
+- **Claude extraction retry added:** on a thin first extraction result, Claude now waits 4 seconds and retries, consistent with ChatGPT and Grok.
+- **Dangerous regex in Claude response cleanup:** `\bRetry\b.*$/s` (dotAll) was truncating every Claude response at the first occurrence of "retry" anywhere in the text (e.g. mid-sentence "you can retry this approach…"). Replaced with a trailing-only strip of known UI button labels.
+
+### Changed
+
+- `buildClaudeCompletionCheckFn` now checks `data-is-streaming`, streaming cursor and animation class names, cancel button text, and URL path (`/chat/`) as additional completion signals alongside stop-button detection.
+- `installCompletionDetectors` skips Claude entirely and records `skipped: true` in the run trace instead of attempting an injection that always fails and logs a misleading error.
+
 ## v0.1.0 - 2026-05-14
 
 Initial public release.

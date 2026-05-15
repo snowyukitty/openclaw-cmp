@@ -4,7 +4,7 @@ Multi-AI comparison workflow for OpenClaw.
 
 **Languages:** **English** | [繁體中文](docs/README.zh-Hant.md) | [日本語](docs/README.ja.md)
 
-Current release: `v0.1.0`
+Current release: `v0.2.0`
 
 ## Overview
 
@@ -99,15 +99,28 @@ npm run test:live
 - Primary model: `gpt-4o`
 - Fallback model: `gpt-5-mini`
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
+
 ## Roadmap
 
 - Long-term CMP improvements are tracked in [TODO.md](TODO.md).
 
+## Completion Detection
+
+Each platform uses a dedicated per-poll DOM probe rather than injected persistent JS state:
+
+- **ChatGPT / Gemini / Grok:** dedicated completion check functions evaluate DOM signals on each polling cycle.
+- **Claude:** uses the same dedicated probe pattern. Claude.ai navigates from `/new` to `/chat/<id>` on submission, which invalidates the initial tab reference. The probe handles this by evaluating fresh on every cycle — no injected state means no stale-reference failures.
+
+CMP requires a response to be stable for multiple consecutive polls before treating it as complete, so temporarily paused streaming does not trigger premature synthesis.
+
 ## Notes
 
-- Claude may be partially limited on free accounts; CMP should continue with other successful providers.
 - For Chinese questions, synthesis is instructed to use Traditional Chinese rather than Simplified Chinese.
 - Browser-backed providers remain subject to UI drift and login/session constraints.
+- All providers are subject to login/session requirements. CMP never logs in on your behalf.
 
 ## License
 
