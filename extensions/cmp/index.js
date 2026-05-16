@@ -2784,6 +2784,16 @@ async function buildComparisonSynthesis(question, locale, aggregation, runLog) {
   });
   try {
     const modelResult = await generatePreferredSynthesis(question, locale, prepared, aggregation.unusable, runLog);
+    // Enhance directAnswer using OpenClaw's Claude kernel model for richer, more comprehensive synthesis
+    try {
+      const claudeAnswer = await generateClaudeDirectAnswer(question, locale, prepared, aggregation.unusable, runLog);
+      if (claudeAnswer && claudeAnswer.length > (modelResult.directAnswer || "").length) {
+        modelResult.directAnswer = claudeAnswer;
+        modelResult.mode = (modelResult.mode || "model") + "+claude";
+      }
+    } catch (claudeError) {
+      traceRun(runLog, "claude_direct_answer_skipped", { reason: toErrorMessage(claudeError) });
+    }
     const completedSummaries = await fillMissingPlatformSummaries(question, locale, prepared, modelResult.platformViews || {}, runLog);
     modelResult.platformViews = completedSummaries;
     traceRun(runLog, "summary_generation_complete", {
@@ -3368,7 +3378,7 @@ async function generateModelSynthesis(question, locale, prepared, unusable, runL
   const raw = await runGatewayChatCompletion({
     messages: buildSynthesisMessages(locale, payload),
     temperature: 0.2,
-    max_tokens: 3200
+    max_tokens: 5000
   });
   traceRun(runLog, "synthesis_model_provider", raw?._cmpMeta || { provider: "github-copilot", stage: "primary" });
   const content = extractChatCompletionText(raw);
@@ -3463,7 +3473,7 @@ function buildSynthesisAgentPrompt(locale) {
       "3. consensus 必須寫出真正重疊的 claims / facts / conclusions，不能空泛。",
       "4. majorDifferences 必須點名是哪個平台主張了什麼差異。",
       "5. uniqueAdditions 只保留真正獨特且有價值的補充，必須標明平台。",
-      "6. directAnswer 必須是最長的一段，對非 trivial 問題至少寫出約 400 字以上的完整回答，直接回答原問題，吸收多平台長處，必要時用小標題與條列，格式適合 Discord / Telegram 閱讀。",
+      "6. directAnswer 是整個輸出中最核心、最重要的部分，對任何實質性問題至少寫出 700 字以上，建議 1000-1200 字；直接回答原問題，深度整合多平台的論點、具體例子與數據；必要時用 Markdown 小標題與條列，讓 Discord / Telegram 上易讀；這是使用者最重視的部分，請盡力寫好。",
       "7. platformViews 必須是你自己寫的 4-8 句摘要，不可剪貼開頭段落，不可保留 planning/thinking 句。",
       "8. 全部內容必須與使用者問題同語言。",
       "9. 禁止輸出 placeholder、退化說明、未完成說明、UI 殘留說明。",
@@ -3486,7 +3496,7 @@ function buildSynthesisAgentPrompt(locale) {
       "4. consensus must capture real overlap, not generic fluff.",
       "5. majorDifferences must identify which platform took which position.",
       "6. uniqueAdditions should keep only genuinely distinctive and useful contributions, labeled by platform.",
-      "7. directAnswer must be the longest section and directly answer the user's question in at least roughly 400 words for any non-trivial topic.",
+      "7. directAnswer must be the longest and most important section: write at least 700 words, targeting 1000-1200 words for any non-trivial topic. Directly answer the user's question with depth, drawing concrete reasoning, examples, and insights from all platform answers.",
       "8. Platform summaries must be real summaries, not clipped excerpts or planning text.",
       "9. Match the user's language.",
       "10. Never output template phrases such as 'organizes the answer around', 'common evaluation lenses', or similar fill-in-the-blank wording."
@@ -3590,7 +3600,7 @@ function buildSynthesisSystemPrompt(locale) {
       "2. keyPoints 每個平台最多 3 點，保留關鍵結論、排名、候選項或前提。",
       "3. consensus / majorDifferences / uniqueAdditions 必須比較答案內容，而不是比較模型長短或風格。",
       "4. directAnswer 要直接回應使用者原始問題，吸收多平台共同資訊與合理差異。",
-      "5. directAnswer 必須是五個區段裡最長、最完整的一段素材來源；對非 trivial 問題至少約 400 字，必要時可用 markdown 小標題與條列，讓 Discord / Telegram 上易讀。",
+      "5. directAnswer 必須是五個區段裡最重要、最長、最完整的核心回答；對任何實質性問題至少 700 字，建議 1000 字以上；必要時用 markdown 小標題與條列，讓 Discord / Telegram 上易讀；這是整個 synthesis 的核心輸出，必須詳盡充實。",
       "6. 如果某平台答案較弱但仍可用，要在 caveats 裡低調說明，不要讓主文被失敗狀態淹沒。",
       "7. consensus / majorDifferences / uniqueAdditions 必須引用答案細節，不要空泛地說『都差不多』。",
       "8. majorDifferences 與 uniqueAdditions 都應盡量點名是哪個平台提出了什麼觀點。",
@@ -3619,8 +3629,8 @@ function buildSynthesisSystemPrompt(locale) {
       "1. Each platform summary must be a real summary, not a clipped fragment.",
       "2. keyPoints should keep important ranked items, recurring candidates, caveats, or criteria.",
       "3. consensus / majorDifferences / uniqueAdditions must compare answer content, not writing style.",
-      "4. directAnswer must answer the original user question more usefully than any single platform response.",
-      "5. directAnswer must be the longest and most detailed section, and may use markdown-friendly subheadings and bullets so it reads well in Discord and Telegram.",
+      "4. directAnswer must answer the original user question more usefully than any single platform response — synthesize the best reasoning and concrete details from all platforms.",
+      "5. directAnswer is the most important output: write at least 700 words, targeting 1000+ words for any non-trivial question. Use markdown-friendly subheadings, bullet lists, and bold text so it reads well in Discord and Telegram. This is what the user cares about most — be thorough.",
       "6. Use caveats only for meaningful limitations or weak-input notes.",
       "7. consensus / majorDifferences / uniqueAdditions must use concrete answer details rather than generic filler.",
       "8. majorDifferences and uniqueAdditions should identify which platform contributed which idea whenever possible.",
@@ -3699,7 +3709,7 @@ function validateModelSynthesis(question, synthesis) {
     throw new Error("Synthesis model omitted required sections.");
   }
   const directAnswer = compactWhitespace(synthesis?.directAnswer || "");
-  if (!directAnswer || directAnswer.length < (String(question || "").length > 20 ? 350 : 180)) {
+  if (!directAnswer || directAnswer.length < (String(question || "").length > 20 ? 500 : 250)) {
     throw new Error("Synthesis direct answer is too short.");
   }
 }
@@ -4388,6 +4398,108 @@ async function runGatewayChatCompletion(body) {
       }
     };
   }
+}
+
+async function runClaudeProxyMessages({ system, messages, max_tokens, temperature }) {
+  const authProfiles = await readJson(AUTH_PROFILES_PATH);
+  const profiles = authProfiles?.profiles || {};
+  const claudeProfile = profiles["api-proxy-claude:default"];
+  if (!claudeProfile?.key) throw new Error("Missing api-proxy-claude auth profile key.");
+  const apiKey = claudeProfile.key;
+  const baseUrl = "https://api.vectorengine.ai";
+  const url = new URL("/v1/messages", baseUrl);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 120000);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: max_tokens || 4000,
+        temperature: temperature ?? 0.3,
+        system,
+        messages
+      }),
+      signal: ctrl.signal
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`Claude proxy error ${response.status}: ${text.slice(0, 500)}`);
+    const json = JSON.parse(text);
+    const content = json?.content?.[0]?.text || "";
+    if (!content) throw new Error("Claude proxy returned empty content.");
+    return content;
+  } catch (error) {
+    if (error?.name === "AbortError") throw new Error("Claude proxy synthesis timed out after 120s.");
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function buildClaudeDirectAnswerSystemPrompt(locale) {
+  return localize(locale, {
+    zh: [
+      "你是 CMP 的最終答案合成專家。你的唯一任務是撰寫「最佳綜合答案」（Best Combined Answer）。",
+      "你已經看到多個 AI 平台對同一問題的完整回答。你必須以這些平台回答為素材，寫出一個比任何單一平台都更深入、更完整、更有價值的答案。",
+      "若問題是中文，全部內容請使用繁體中文，不要使用簡體中文。",
+      "硬性要求：",
+      "1. 至少寫 800 字，建議 1000-1500 字。篇幅是你給予使用者深度的承諾，不要縮水。",
+      "2. 以專家身份直接回答使用者的問題，不要說「A平台說…」「根據各平台回答」之類的話。",
+      "3. 從所有平台回答中抽取最有價值的具體資訊、數據、推理鏈、例子和見解，整合成一個連貫、有深度的答案。",
+      "4. 使用 Markdown 小標題（如 **一、背景分析** 或 **## 核心結論**）、條列清單、粗體重點，讓結構清晰、易讀。",
+      "5. 不要只是列點羅列各平台的觀點，要做真正的整合——找出最強的論點，解釋為什麼某些觀點更有說服力，補充各平台沒有說清楚的部分。",
+      "6. 不要輸出 JSON，只輸出純文字答案。",
+      "7. 不要用模板化開頭，例如「以下是綜合分析」「綜合多平台回答」。直接進入核心內容。",
+      "8. 如果有平台沒有成功回答，忽略它，基於成功的平台回答來寫。"
+    ].join("\n"),
+    ja: [
+      "あなたは CMP の最終回答合成専門家です。唯一のタスクは「最良の統合回答（Best Combined Answer）」を書くことです。",
+      "複数 AI プラットフォームの完全な回答を素材に、どの単一プラットフォームよりも深く、完全で、価値ある回答を書いてください。",
+      "要件：",
+      "1. 少なくとも 800 字、推奨 1000-1500 字。",
+      "2. 専門家として直接回答する。プラットフォーム比較の言い回しを避ける。",
+      "3. すべての回答から最も価値ある具体的情報、例、推論を抽出し、一貫した深い回答に統合する。",
+      "4. Markdown の小見出し、箇条書き、太字を使い、Discord/Telegram で読みやすくする。",
+      "5. JSON ではなく純テキストで回答する。テンプレート的な書き出しを避ける。"
+    ].join("\n"),
+    en: [
+      "You are the CMP final answer synthesis expert. Your sole task is to write the Best Combined Answer.",
+      "You have the full answers from multiple AI platforms to the same question. Use these as raw material to write an answer that is more thorough, insightful, and useful than any single platform's response.",
+      "Requirements:",
+      "1. Write at least 800 words, targeting 1000-1500 words. Length reflects the depth you give the user — don't cut it short.",
+      "2. Write as an expert directly answering the user — avoid phrases like 'Platform X says' or 'According to the platform answers'.",
+      "3. Extract the most valuable concrete information, data, reasoning chains, examples, and insights from all platform answers and integrate them into a coherent, in-depth response.",
+      "4. Use Markdown subheadings, bullet lists, and bold text to make the answer well-structured and readable in Discord/Telegram.",
+      "5. Don't just list each platform's points in sequence — do real synthesis: identify the strongest arguments, explain why some positions are more convincing, fill gaps that no single platform addressed.",
+      "6. Output plain text only, not JSON.",
+      "7. Do not use templated openings like 'Here is a comprehensive analysis' or 'Based on the platform answers'. Jump straight into the substance.",
+      "8. If a platform failed to answer, ignore it and base your answer on the successful ones."
+    ].join("\n")
+  });
+}
+
+async function generateClaudeDirectAnswer(question, locale, prepared, unusable, runLog) {
+  traceRun(runLog, "claude_direct_answer_start", { platformCount: prepared.length });
+  const systemPrompt = buildClaudeDirectAnswerSystemPrompt(locale);
+  const userContent = JSON.stringify({
+    question,
+    platforms: prepared.map((e) => ({ name: e.name, answer: e.answer })),
+    unavailable: (unusable || []).map((e) => ({ name: e.name, reason: e.reason }))
+  });
+  const text = await runClaudeProxyMessages({
+    system: systemPrompt,
+    messages: [{ role: "user", content: userContent }],
+    max_tokens: 4500,
+    temperature: 0.3
+  });
+  const result = compactWhitespacePreservingLines(text.trim());
+  traceRun(runLog, "claude_direct_answer_complete", { length: result.length });
+  return result;
 }
 
 async function resolveCmpCopilotRuntimeAuth() {
