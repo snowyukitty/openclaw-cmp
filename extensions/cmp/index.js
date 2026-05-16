@@ -2784,15 +2784,16 @@ async function buildComparisonSynthesis(question, locale, aggregation, runLog) {
   });
   try {
     const modelResult = await generatePreferredSynthesis(question, locale, prepared, aggregation.unusable, runLog);
-    // Enhance directAnswer using OpenClaw's Claude kernel model for richer, more comprehensive synthesis
+    // Second-pass directAnswer using gpt-4.1 (free, flat-rate Copilot) with a dedicated 8000-token budget.
+    // This produces a richer Best Combined Answer than the joint synthesis pass which shares tokens across all 5 fields.
     try {
-      const claudeAnswer = await generateClaudeDirectAnswer(question, locale, prepared, aggregation.unusable, runLog);
-      if (claudeAnswer && claudeAnswer.length > (modelResult.directAnswer || "").length) {
-        modelResult.directAnswer = claudeAnswer;
-        modelResult.mode = (modelResult.mode || "model") + "+claude";
+      const richAnswer = await generateClaudeDirectAnswer(question, locale, prepared, aggregation.unusable, runLog);
+      if (richAnswer && richAnswer.length > (modelResult.directAnswer || "").length) {
+        modelResult.directAnswer = richAnswer;
+        modelResult.mode = (modelResult.mode || "model") + "+gpt41";
       }
-    } catch (claudeError) {
-      traceRun(runLog, "claude_direct_answer_skipped", { reason: toErrorMessage(claudeError) });
+    } catch (richAnswerError) {
+      traceRun(runLog, "claude_direct_answer_skipped", { reason: toErrorMessage(richAnswerError) });
     }
     const completedSummaries = await fillMissingPlatformSummaries(question, locale, prepared, modelResult.platformViews || {}, runLog);
     modelResult.platformViews = completedSummaries;
@@ -4344,8 +4345,10 @@ async function runGatewayChatCompletion(body) {
    * 2) the local Gateway /v1/chat/completions route now rejects CMP's bearer token with missing scope: operator.write.
    *
    * CMP therefore bypasses the local Gateway for synthesis and talks directly to GitHub Copilot's
-   * OpenAI-compatible API using the owner's existing GitHub Copilot auth profile. The required model
-   * is github-copilot/gpt-4o, with github-copilot/gpt-5-mini as the only fallback.
+   * OpenAI-compatible API using the owner's existing GitHub Copilot auth profile.
+   * Primary: gpt-4.1 (better instruction following and long-form generation than gpt-4o)
+   * Fallback chain: gpt-4o → gpt-5-mini
+   * All three are free/flat-rate under the GitHub Copilot subscription — use them generously.
    *
    * If this breaks after a future OpenClaw update, verify:
    * - ~/.openclaw/agents/main/agent/auth-profiles.json still has github-copilot:github or :default
@@ -4353,91 +4356,32 @@ async function runGatewayChatCompletion(body) {
    * - the resolved Copilot baseUrl still accepts POST /chat/completions
    */
   const runtimeAuth = await resolveCmpCopilotRuntimeAuth();
-  const completionBody = {
-    ...body,
-    model: "gpt-4o"
-  };
+  const primaryModel = body.model || "gpt-4.1";
+  const completionBody = { ...body, model: primaryModel };
+  const copilotHeaders = { "Editor-Version": "vscode/1.96.0", "Editor-Plugin-Version": "copilot-chat/0.24.2", "Copilot-Integration-Id": "vscode-chat", "Openai-Intent": "conversation-panel" };
+  const makeRequest = async (model) => gatewayRequest({
+    baseUrl: runtimeAuth.baseUrl,
+    token: runtimeAuth.token,
+    path: "/chat/completions",
+    body: { ...completionBody, model },
+    timeoutMs: 120000,
+    extraHeaders: copilotHeaders
+  });
   try {
-    const response = await gatewayRequest({
-      baseUrl: runtimeAuth.baseUrl,
-      token: runtimeAuth.token,
-      path: "/chat/completions",
-      body: completionBody,
-      timeoutMs: 90000, extraHeaders: { "Editor-Version": "vscode/1.96.0", "Editor-Plugin-Version": "copilot-chat/0.24.2", "Copilot-Integration-Id": "vscode-chat", "Openai-Intent": "conversation-panel" }
-    });
-    return {
-      ...response,
-      _cmpMeta: {
-        provider: "github-copilot",
-        model: "gpt-4o",
-        baseUrl: runtimeAuth.baseUrl,
-        tokenSource: runtimeAuth.source || "resolved"
-      }
-    };
+    const response = await makeRequest(primaryModel);
+    return { ...response, _cmpMeta: { provider: "github-copilot", model: primaryModel, baseUrl: runtimeAuth.baseUrl, tokenSource: runtimeAuth.source || "resolved" } };
   } catch (primaryError) {
-    const response = await gatewayRequest({
-      baseUrl: runtimeAuth.baseUrl,
-      token: runtimeAuth.token,
-      path: "/chat/completions",
-      body: {
-        ...completionBody,
-        model: "gpt-5-mini"
-      },
-      timeoutMs: 90000, extraHeaders: { "Editor-Version": "vscode/1.96.0", "Editor-Plugin-Version": "copilot-chat/0.24.2", "Copilot-Integration-Id": "vscode-chat", "Openai-Intent": "conversation-panel" }
-    }).catch((fallbackError) => {
-      throw new Error(`GitHub Copilot synthesis failed for gpt-4o and gpt-5-mini. Primary: ${toErrorMessage(primaryError)}. Fallback: ${toErrorMessage(fallbackError)}`);
-    });
-    return {
-      ...response,
-      _cmpMeta: {
-        provider: "github-copilot",
-        model: "gpt-5-mini",
-        baseUrl: runtimeAuth.baseUrl,
-        tokenSource: runtimeAuth.source || "resolved",
-        primaryError: toErrorMessage(primaryError)
+    const fallbackModels = ["gpt-4o", "gpt-5-mini"].filter((m) => m !== primaryModel);
+    let lastError = primaryError;
+    for (const fallbackModel of fallbackModels) {
+      try {
+        const response = await makeRequest(fallbackModel);
+        return { ...response, _cmpMeta: { provider: "github-copilot", model: fallbackModel, baseUrl: runtimeAuth.baseUrl, tokenSource: runtimeAuth.source || "resolved", primaryError: toErrorMessage(primaryError) } };
+      } catch (err) {
+        lastError = err;
       }
-    };
-  }
-}
-
-async function runClaudeProxyMessages({ system, messages, max_tokens, temperature }) {
-  const authProfiles = await readJson(AUTH_PROFILES_PATH);
-  const profiles = authProfiles?.profiles || {};
-  const claudeProfile = profiles["api-proxy-claude:default"];
-  if (!claudeProfile?.key) throw new Error("Missing api-proxy-claude auth profile key.");
-  const apiKey = claudeProfile.key;
-  const baseUrl = "https://api.vectorengine.ai";
-  const url = new URL("/v1/messages", baseUrl);
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 120000);
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: max_tokens || 4000,
-        temperature: temperature ?? 0.3,
-        system,
-        messages
-      }),
-      signal: ctrl.signal
-    });
-    const text = await response.text();
-    if (!response.ok) throw new Error(`Claude proxy error ${response.status}: ${text.slice(0, 500)}`);
-    const json = JSON.parse(text);
-    const content = json?.content?.[0]?.text || "";
-    if (!content) throw new Error("Claude proxy returned empty content.");
-    return content;
-  } catch (error) {
-    if (error?.name === "AbortError") throw new Error("Claude proxy synthesis timed out after 120s.");
-    throw error;
-  } finally {
-    clearTimeout(timer);
+    }
+    throw new Error(`GitHub Copilot synthesis failed for all models (${[primaryModel, ...fallbackModels].join(", ")}). Last error: ${toErrorMessage(lastError)}`);
   }
 }
 
@@ -4491,14 +4435,19 @@ async function generateClaudeDirectAnswer(question, locale, prepared, unusable, 
     platforms: prepared.map((e) => ({ name: e.name, answer: e.answer })),
     unavailable: (unusable || []).map((e) => ({ name: e.name, reason: e.reason }))
   });
-  const text = await runClaudeProxyMessages({
-    system: systemPrompt,
-    messages: [{ role: "user", content: userContent }],
-    max_tokens: 4500,
+  // Use gpt-4.1 via GitHub Copilot (free/flat-rate). Large token budget since there is no per-token cost.
+  const raw = await runGatewayChatCompletion({
+    model: "gpt-4.1",
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userContent }
+    ],
+    max_tokens: 8000,
     temperature: 0.3
   });
+  const text = extractChatCompletionText(raw);
   const result = compactWhitespacePreservingLines(text.trim());
-  traceRun(runLog, "claude_direct_answer_complete", { length: result.length });
+  traceRun(runLog, "claude_direct_answer_complete", { length: result.length, model: raw?._cmpMeta?.model || "gpt-4.1" });
   return result;
 }
 
