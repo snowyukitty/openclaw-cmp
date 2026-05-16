@@ -59,9 +59,20 @@ npm run test:live
 
 ## 現在の synthesis runtime
 
-- 主要 provider：GitHub Copilot 互換 endpoint
-- 主要モデル：`gpt-4o`
-- fallback モデル：`gpt-5-mini`
+CMP は **2 パス synthesis パイプライン**を採用しています。どちらのパスも GitHub Copilot endpoint を使用します（サブスクリプション制、トークン課金なし）。
+
+**第 1 パス — 構造 synthesis（GPT-4.1、5000 tokens）**
+
+5 つのセクション全体を生成します：`platformViews`、`Consensus`、`Major Differences`、`Unique Additions`、および `Best Combined Answer` の初稿。
+
+**第 2 パス — Best Combined Answer（GPT-4.1、8000 tokens 専用）**
+
+`Best Combined Answer` 専用の独立した呼び出しです。各プラットフォームの完全な回答を受け取り、8000 tokens の専用バジェットで再執筆します。第 2 パスの出力が初稿より長く充実している場合のみ置き換えます。第 2 パスが失敗した場合は第 1 パスの初稿を保持します。
+
+| | モデル | Token バジェット | Fallback チェーン |
+|---|---|---|---|
+| 第 1 パス | `github-copilot/gpt-4.1` | 5000 | `gpt-4o` → `gpt-5-mini` |
+| 第 2 パス | `github-copilot/gpt-4.1` | 8000 | `gpt-4o` → `gpt-5-mini` |
 
 ## 完了検出の仕組み
 

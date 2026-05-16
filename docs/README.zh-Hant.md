@@ -59,9 +59,20 @@ npm run test:live
 
 ## 目前 synthesis runtime
 
-- 主要 provider：GitHub Copilot 相容 endpoint
-- 主要模型：`gpt-4o`
-- fallback 模型：`gpt-5-mini`
+CMP 使用**兩階段 synthesis pipeline**。兩個階段都走 GitHub Copilot endpoint（訂閱制，無 token 計費）。
+
+**第一階段 — 結構 synthesis（GPT-4.1，5000 tokens）**
+
+產出完整五個區段：`platformViews`、`Consensus`、`Major Differences`、`Unique Additions`，以及 `Best Combined Answer` 初稿。
+
+**第二階段 — Best Combined Answer（GPT-4.1，8000 tokens 專屬）**
+
+獨立的第二次呼叫，專注於撰寫 `Best Combined Answer`。接收每個平台的完整回答，使用 8000 tokens 專屬預算重新撰寫。僅當第二階段輸出比初稿更長更豐富時才替換；若第二階段失敗，保留第一階段初稿。
+
+| | 模型 | Token 預算 | Fallback 鏈 |
+|---|---|---|---|
+| 第一階段 | `github-copilot/gpt-4.1` | 5000 | `gpt-4o` → `gpt-5-mini` |
+| 第二階段 | `github-copilot/gpt-4.1` | 8000 | `gpt-4o` → `gpt-5-mini` |
 
 ## 完成偵測機制
 

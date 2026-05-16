@@ -4,7 +4,7 @@ Multi-AI comparison workflow for OpenClaw.
 
 **Languages:** **English** | [繁體中文](docs/README.zh-Hant.md) | [日本語](docs/README.ja.md)
 
-Current release: `v0.2.0`
+Current release: `v0.3.0`
 
 ## Overview
 
@@ -95,9 +95,20 @@ npm run test:live
 
 ## Current Synthesis Runtime
 
-- Primary provider: GitHub Copilot compatible endpoint
-- Primary model: `gpt-4o`
-- Fallback model: `gpt-5-mini`
+CMP runs a two-pass synthesis pipeline. Both passes use the GitHub Copilot endpoint (free/flat-rate — no per-token cost).
+
+**Pass 1 — structure synthesis (GPT-4.1, 5000 tokens)**
+
+Produces the full five-section output: `platformViews`, `Consensus`, `Major Differences`, `Unique Additions`, and an initial `directAnswer`.
+
+**Pass 2 — Best Combined Answer (GPT-4.1, 8000 tokens dedicated)**
+
+A second, independent call focused entirely on `Best Combined Answer`. It receives every platform's full answer and rewrites the section with a dedicated 8000-token budget. Pass 2 only replaces the initial draft when it produces a longer, richer result; if it fails for any reason, the Pass 1 draft is kept.
+
+| | Model | Token budget | Fallback chain |
+|---|---|---|---|
+| Pass 1 | `github-copilot/gpt-4.1` | 5000 | `gpt-4o` → `gpt-5-mini` |
+| Pass 2 | `github-copilot/gpt-4.1` | 8000 | `gpt-4o` → `gpt-5-mini` |
 
 ## Changelog
 

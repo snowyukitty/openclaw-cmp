@@ -2,6 +2,22 @@
 
 All notable changes to `openclaw-cmp` will be documented in this file.
 
+## v0.3.0 - 2026-05-16
+
+### Changed
+
+- **Synthesis model upgraded to `github-copilot/gpt-4.1`** across all passes. GPT-4.1 has better instruction following and long-form generation quality than GPT-4o, which directly improves `Best Combined Answer` depth. Fallback chain is now `gpt-4.1` → `gpt-4o` → `gpt-5-mini`.
+- **Two-pass synthesis pipeline for Best Combined Answer:** a second, independent call to GPT-4.1 now runs after the main synthesis with a dedicated 8000-token budget for `Best Combined Answer` only. The dedicated pass receives every platform's full answer and is instructed to write 800–1500 words of expert-level synthesis. It replaces the first-pass draft only when it produces a longer result; if it fails, the first-pass draft is kept.
+- **Pass 1 token budget raised from 3200 to 5000** to give the main synthesis more room for all five sections.
+- **`directAnswer` minimum length validation raised** from 350 to 500 characters.
+- **`directAnswer` prompt requirements strengthened** in both the system prompt and the agent prompt: changed from "~400 words" to "700+ words, target 1000+".
+- **`runGatewayChatCompletion` timeout raised** from 90 s to 120 s to accommodate larger token budgets.
+
+### Fixed
+
+- Removed accidental dependency on `api-proxy-claude` (pay-per-token) in the synthesis path. All synthesis passes now use GitHub Copilot (free/flat-rate subscription).
+- Fallback chain in `runGatewayChatCompletion` now iterates a model list instead of a single hardcoded fallback, making it easier to extend.
+
 ## v0.2.0 - 2026-05-16
 
 ### Fixed
