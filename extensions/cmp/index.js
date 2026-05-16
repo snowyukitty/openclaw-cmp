@@ -4537,7 +4537,7 @@ async function runAgentJsonTask({ prompt, input, timeoutMs, maxTokens, thinkLeve
       sessionId,
       sessionFile,
       workspaceDir: cmpCoreConfig?.agents?.defaults?.workspace ?? process.cwd(),
-      config: { ...cmpCoreConfig, agents: { ...cmpCoreConfig?.agents, defaults: { ...cmpCoreConfig?.agents?.defaults, model: { primary: "github-copilot/gpt-4o", fallbacks: ["github-copilot/gpt-5-mini"] } } } },
+      config: { ...cmpCoreConfig, agents: { ...cmpCoreConfig?.agents, defaults: { ...cmpCoreConfig?.agents?.defaults, model: { primary: "github-copilot/gpt-4.1", fallbacks: ["github-copilot/gpt-4o", "github-copilot/gpt-5-mini"] } } } },
       prompt: fullPrompt,
       timeoutMs: timeoutMs || 120000,
       runId: `cmp-agent-${Date.now()}`,
