@@ -69,6 +69,8 @@ CMP 使用**兩階段 synthesis pipeline**。兩個階段都走 GitHub Copilot e
 
 獨立的第二次呼叫，專注於撰寫 `Best Combined Answer`。接收每個平台的完整回答，使用 8000 tokens 專屬預算重新撰寫。僅當第二階段輸出比初稿更長更豐富時才替換；若第二階段失敗，保留第一階段初稿。
 
+這個階段的 trace event 使用 `rich_direct_answer_*` 命名，避免把 GitHub Copilot synthesis 誤標成特定廠商路徑。
+
 | | 模型 | Token 預算 | Fallback 鏈 |
 |---|---|---|---|
 | 第一階段 | `github-copilot/gpt-4.1` | 5000 | `gpt-4o` → `gpt-5-mini` |

@@ -2787,13 +2787,13 @@ async function buildComparisonSynthesis(question, locale, aggregation, runLog) {
     // Second-pass directAnswer using gpt-4.1 (free, flat-rate Copilot) with a dedicated 8000-token budget.
     // This produces a richer Best Combined Answer than the joint synthesis pass which shares tokens across all 5 fields.
     try {
-      const richAnswer = await generateClaudeDirectAnswer(question, locale, prepared, aggregation.unusable, runLog);
+      const richAnswer = await generateRichDirectAnswer(question, locale, prepared, aggregation.unusable, runLog);
       if (richAnswer && richAnswer.length > (modelResult.directAnswer || "").length) {
         modelResult.directAnswer = richAnswer;
         modelResult.mode = (modelResult.mode || "model") + "+gpt41";
       }
     } catch (richAnswerError) {
-      traceRun(runLog, "claude_direct_answer_skipped", { reason: toErrorMessage(richAnswerError) });
+      traceRun(runLog, "rich_direct_answer_skipped", { reason: toErrorMessage(richAnswerError) });
     }
     const completedSummaries = await fillMissingPlatformSummaries(question, locale, prepared, modelResult.platformViews || {}, runLog);
     modelResult.platformViews = completedSummaries;
@@ -4385,7 +4385,7 @@ async function runGatewayChatCompletion(body) {
   }
 }
 
-function buildClaudeDirectAnswerSystemPrompt(locale) {
+function buildRichDirectAnswerSystemPrompt(locale) {
   return localize(locale, {
     zh: [
       "你是 CMP 的最終答案合成專家。你的唯一任務是撰寫「最佳綜合答案」（Best Combined Answer）。",
@@ -4427,9 +4427,9 @@ function buildClaudeDirectAnswerSystemPrompt(locale) {
   });
 }
 
-async function generateClaudeDirectAnswer(question, locale, prepared, unusable, runLog) {
-  traceRun(runLog, "claude_direct_answer_start", { platformCount: prepared.length });
-  const systemPrompt = buildClaudeDirectAnswerSystemPrompt(locale);
+async function generateRichDirectAnswer(question, locale, prepared, unusable, runLog) {
+  traceRun(runLog, "rich_direct_answer_start", { platformCount: prepared.length });
+  const systemPrompt = buildRichDirectAnswerSystemPrompt(locale);
   const userContent = JSON.stringify({
     question,
     platforms: prepared.map((e) => ({ name: e.name, answer: e.answer })),
@@ -4447,7 +4447,7 @@ async function generateClaudeDirectAnswer(question, locale, prepared, unusable, 
   });
   const text = extractChatCompletionText(raw);
   const result = compactWhitespacePreservingLines(text.trim());
-  traceRun(runLog, "claude_direct_answer_complete", { length: result.length, model: raw?._cmpMeta?.model || "gpt-4.1" });
+  traceRun(runLog, "rich_direct_answer_complete", { length: result.length, model: raw?._cmpMeta?.model || "gpt-4.1" });
   return result;
 }
 

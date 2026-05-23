@@ -69,6 +69,8 @@ CMP は **2 パス synthesis パイプライン**を採用しています。ど�
 
 `Best Combined Answer` 専用の独立した呼び出しです。各プラットフォームの完全な回答を受け取り、8000 tokens の専用バジェットで再執筆します。第 2 パスの出力が初稿より長く充実している場合のみ置き換えます。第 2 パスが失敗した場合は第 1 パスの初稿を保持します。
 
+このパスの trace event は `rich_direct_answer_*` という名前にしており、GitHub Copilot synthesis を特定ベンダー経路として誤解しないようにしています。
+
 | | モデル | Token バジェット | Fallback チェーン |
 |---|---|---|---|
 | 第 1 パス | `github-copilot/gpt-4.1` | 5000 | `gpt-4o` → `gpt-5-mini` |

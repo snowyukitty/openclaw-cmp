@@ -4,7 +4,7 @@ Multi-AI comparison workflow for OpenClaw.
 
 **Languages:** **English** | [繁體中文](docs/README.zh-Hant.md) | [日本語](docs/README.ja.md)
 
-Current release: `v0.3.0`
+Current release: `v0.3.1`
 
 ## Overview
 
@@ -104,6 +104,8 @@ Produces the full five-section output: `platformViews`, `Consensus`, `Major Diff
 **Pass 2 — Best Combined Answer (GPT-4.1, 8000 tokens dedicated)**
 
 A second, independent call focused entirely on `Best Combined Answer`. It receives every platform's full answer and rewrites the section with a dedicated 8000-token budget. Pass 2 only replaces the initial draft when it produces a longer, richer result; if it fails for any reason, the Pass 1 draft is kept.
+
+Trace events for this pass are named `rich_direct_answer_*` so logs describe the role of the pass rather than implying a specific vendor.
 
 | | Model | Token budget | Fallback chain |
 |---|---|---|---|
