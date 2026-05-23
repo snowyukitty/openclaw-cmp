@@ -2,6 +2,19 @@
 
 All notable changes to `openclaw-cmp` will be documented in this file.
 
+## v0.3.3 - 2026-05-23
+
+### Fixed
+
+- Added startup activation and tool contract metadata to the CMP plugin manifest so `/cmp` is loaded into the gateway runtime and exposed to Discord native slash command deployment consistently.
+- Updated the CMP doctor to accept current `Connectivity probe: ok` gateway output instead of warning on healthy gateways.
+- Updated the CMP doctor to verify the latest gateway startup loaded `cmp`, instead of passing on stale historical registration log lines.
+- Updated the CMP doctor to report the newer missing `openclaw browser` subcommand as checked runtime evidence instead of a warning.
+
+### Changed
+
+- Updated English, Traditional Chinese, and Japanese docs with explicit restart-and-doctor guidance after CMP updates.
+
 ## v0.3.2 - 2026-05-23
 
 ### Added

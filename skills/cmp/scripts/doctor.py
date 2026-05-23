@@ -43,6 +43,14 @@ def warn(name: str, detail: str) -> None:
     print(f"[WARN] {name}: {detail}")
 
 
+def log_message(line: str) -> str:
+    try:
+        payload = json.loads(line)
+    except Exception:
+        return line
+    return str(payload.get("message") or payload.get("1") or line)
+
+
 def get_latest_gateway_log() -> Path | None:
     if not TMP_LOG_DIR.exists():
         return None
@@ -101,6 +109,21 @@ def summarize_last_run() -> tuple[bool, str]:
     return True, "last-run exists but contains no browser_status trace"
 
 
+def latest_startup_window(log_text: str) -> tuple[str, str]:
+    lines = log_text.splitlines()
+    startup_index = -1
+    startup_line = ""
+    for index, line in enumerate(lines):
+        if "http server listening" in line:
+            startup_index = index
+            startup_line = log_message(line)
+    if startup_index < 0:
+        return "", ""
+    start = max(0, startup_index - 80)
+    end = min(len(lines), startup_index + 20)
+    return startup_line, "\n".join(log_message(line) for line in lines[start:end])
+
+
 def main() -> int:
     ok = True
 
@@ -133,6 +156,13 @@ def main() -> int:
     ok &= check("cmp skill", (CMP_DIR / "SKILL.md").exists(), str(CMP_DIR / "SKILL.md"))
     ok &= check("cmp plugin", PLUGIN_PATH.exists(), str(PLUGIN_PATH))
     ok &= check("cmp manifest", PLUGIN_MANIFEST.exists(), str(PLUGIN_MANIFEST))
+    if PLUGIN_MANIFEST.exists():
+        manifest = load_json(PLUGIN_MANIFEST)
+        activation = manifest.get("activation", {}) or {}
+        contracts = manifest.get("contracts", {}) or {}
+        contract_tools = contracts.get("tools", []) or []
+        ok &= check("manifest startup activation", activation.get("onStartup") is True, str(activation))
+        ok &= check("manifest tool contract", "cmp" in contract_tools, json.dumps(contract_tools))
 
     enabled = [name for name, value in state.items() if value]
     ok &= check("enabled platforms", bool(enabled), ", ".join(enabled) if enabled else "none")
@@ -147,14 +177,14 @@ def main() -> int:
 
     rc, gateway_status = run(["openclaw", "gateway", "status"])
     gateway_running = rc == 0 and "Runtime: running" in gateway_status
-    gateway_probe_ok = "RPC probe: ok" in gateway_status
+    gateway_probe_ok = "RPC probe: ok" in gateway_status or "Connectivity probe: ok" in gateway_status
     ok &= check("gateway status", gateway_running, gateway_status.splitlines()[0] if gateway_status else "(no output)")
     if gateway_probe_ok:
-        check("gateway rpc probe", True, "RPC probe ok")
+        check("gateway connectivity probe", True, "probe ok")
     elif gateway_running:
-        warn("gateway rpc probe", "gateway service is running but probe is warming up or flaky on this host")
+        warn("gateway connectivity probe", "gateway service is running but probe is warming up or flaky on this host")
     else:
-        ok &= check("gateway rpc probe", False, gateway_status)
+        ok &= check("gateway connectivity probe", False, gateway_status)
 
     rc, gateway_probe = run(["openclaw", "gateway", "probe"])
     probe_ok = "Reachable: yes" in gateway_probe or "Connect: ok" in gateway_probe
@@ -172,14 +202,17 @@ def main() -> int:
     latest_log = get_latest_gateway_log()
     if latest_log and latest_log.exists():
         log_text = latest_log.read_text(encoding="utf-8", errors="ignore")
+        startup_line, startup_window = latest_startup_window(log_text)
         register_line = "[cmp] registering plugin commands: cmp-status (telegram: cmpstatus), cmp-on (telegram: cmpon), cmp-off (telegram: cmpoff), tool: cmp"
-        ok &= check("plugin registration log", register_line in log_text, str(latest_log))
+        ok &= check("gateway startup log", bool(startup_line), startup_line or f"missing startup line in {latest_log}")
+        ok &= check("gateway runtime plugins", "cmp" in startup_line, startup_line or "(no startup line)")
+        ok &= check("plugin registration log", register_line in startup_window, str(latest_log))
         bad_markers = [
             "duplicates an existing native command",
             "invalid for Telegram",
             "failed to deploy native commands",
         ]
-        found_bad = [marker for marker in bad_markers if marker in log_text]
+        found_bad = [marker for marker in bad_markers if marker in startup_window]
         ok &= check("native command log errors", not found_bad, ", ".join(found_bad) if found_bad else "none")
     else:
         ok &= check("gateway log", False, f"missing gateway log under {TMP_LOG_DIR}")
@@ -187,12 +220,12 @@ def main() -> int:
     last_run_ok, last_run_detail = summarize_last_run()
     ok &= check("last-run browser trace", last_run_ok, last_run_detail)
 
-    # OpenClaw 2026.3.28 still uses the managed browser internally, but some
-    # shells no longer expose `openclaw browser ...` directly. Keep the doctor
-    # focused on config + run-log evidence instead of relying on that CLI.
+    # Some OpenClaw builds still use the managed browser internally but no
+    # longer expose `openclaw browser ...` directly. Keep the doctor focused on
+    # config + run-log evidence instead of relying on that CLI.
     rc, browser_cmd_help = run(["openclaw", "browser", "status", "--json"])
     if rc != 0:
-        warn("browser cli", "interactive shell command unavailable; relying on config + last-run traces")
+        check("browser runtime evidence", True, "browser CLI unavailable in this OpenClaw build; config + last-run trace checked")
     else:
         check("browser cli", True, browser_cmd_help)
 
@@ -201,7 +234,8 @@ def main() -> int:
         print("1. openclaw gateway restart")
         print("2. python3 ~/.openclaw/skills/cmp/scripts/doctor.py")
         print("3. openclaw gateway probe")
-        print("4. tail -n 200 /tmp/openclaw/openclaw-$(date +%F).log | rg 'cmp|native command|Telegram|Discord'")
+        print("4. openclaw plugins registry --refresh")
+        print("5. tail -n 200 /tmp/openclaw/openclaw-$(date +%F).log | rg 'cmp|native command|Telegram|Discord|http server listening'")
         return 1
 
     print("\nCMP diagnostics passed.")

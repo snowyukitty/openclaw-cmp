@@ -62,6 +62,15 @@ npm run test:live
 
 `npm run doctor` は、インストール済み CMP plugin、browser/evaluate 設定、native command 設定、チャンネル allowlist、有効化 platform、gateway 状態、直近 run trace を確認します。
 
+CMP のインストールまたは更新後、Discord slash command を試す前に gateway を再起動してください。
+
+```bash
+openclaw gateway restart
+npm run doctor
+```
+
+doctor は最新の gateway startup が実際に `cmp` を読み込んだか確認します。これにより、ファイルは更新済みでも running gateway が古い plugin set のままになっている状況を検出できます。
+
 ## 現在の synthesis runtime
 
 CMP は **2 パス synthesis パイプライン**を採用しています。どちらのパスも GitHub Copilot endpoint を使用します（サブスクリプション制、トークン課金なし）。

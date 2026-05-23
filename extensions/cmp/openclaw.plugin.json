@@ -2,6 +2,19 @@
   "id": "cmp",
   "name": "CMP",
   "description": "Deterministic command handler for the cmp multi-AI browser skill.",
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": [
+      "cmp"
+    ]
+  },
+  "toolMetadata": {
+    "cmp": {
+      "optional": true
+    }
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import plugin, { __cmpTestHooks } from "../extensions/cmp/index.js";
 
 const { stripGeminiPreferenceScaffold, buildPlatformPrompt, isCurrentNewsQuestion } = __cmpTestHooks;
 
 assert.equal(plugin.id, "cmp");
+
+const manifest = JSON.parse(fs.readFileSync(new URL("../extensions/cmp/openclaw.plugin.json", import.meta.url), "utf8"));
+assert.equal(manifest.activation?.onStartup, true);
+assert.deepEqual(manifest.contracts?.tools, ["cmp"]);
 
 const newsQuestion = "2026迄今為止，目前最大的新聞有哪些";
 assert.equal(isCurrentNewsQuestion(newsQuestion), true);

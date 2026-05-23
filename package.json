@@ -1,6 +1,6 @@
 {
   "name": "openclaw-cmp",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Multi-AI comparison workflow for OpenClaw with ChatGPT, Claude, and Gemini support.",
   "license": "MIT",
   "type": "module",
