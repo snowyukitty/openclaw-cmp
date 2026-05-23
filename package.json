@@ -1,6 +1,6 @@
 {
   "name": "openclaw-cmp",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Multi-AI comparison workflow for OpenClaw with ChatGPT, Claude, and Gemini support.",
   "license": "MIT",
   "type": "module",
@@ -25,6 +25,7 @@
   "scripts": {
     "test": "node tests/cmp-smoke.mjs",
     "test:live": "node scripts/live-sample-questions.mjs",
+    "doctor": "python3 skills/cmp/scripts/doctor.py",
     "install:local": "sh scripts/install-local.sh"
   }
 }

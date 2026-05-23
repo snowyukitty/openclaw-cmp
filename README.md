@@ -4,7 +4,7 @@ Multi-AI comparison workflow for OpenClaw.
 
 **Languages:** **English** | [繁體中文](docs/README.zh-Hant.md) | [日本語](docs/README.ja.md)
 
-Current release: `v0.3.1`
+Current release: `v0.3.2`
 
 ## Overview
 
@@ -74,6 +74,8 @@ npm run install:local
 openclaw gateway restart
 ```
 
+The local installer preserves existing `~/.openclaw/skills/cmp/config/state.json`, `platforms.json`, and `~/.openclaw/skills/cmp/logs`, so enabled-platform state, local platform tuning, and recent diagnostics survive repo updates.
+
 Manual copy:
 - `extensions/cmp` -> `~/.openclaw/extensions/cmp`
 - `skills/cmp` -> `~/.openclaw/skills/cmp`
@@ -85,6 +87,7 @@ Smoke test:
 
 ```bash
 npm test
+npm run doctor
 ```
 
 Live local run:
@@ -92,6 +95,8 @@ Live local run:
 ```bash
 npm run test:live
 ```
+
+`npm run doctor` checks the installed CMP plugin, browser/evaluate config, native command settings, channel allowlists, enabled platforms, gateway status, and recent run traces.
 
 ## Current Synthesis Runtime
 

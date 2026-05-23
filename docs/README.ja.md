@@ -38,6 +38,8 @@ npm run install:local
 openclaw gateway restart
 ```
 
+ローカル installer は既存の `~/.openclaw/skills/cmp/config/state.json`、`platforms.json`、`~/.openclaw/skills/cmp/logs` を保持するため、provider の有効化状態、ローカル調整値、直近の診断ログは repo 更新で上書きされません。
+
 手動コピー：
 - `extensions/cmp` -> `~/.openclaw/extensions/cmp`
 - `skills/cmp` -> `~/.openclaw/skills/cmp`
@@ -49,6 +51,7 @@ Smoke test：
 
 ```bash
 npm test
+npm run doctor
 ```
 
 ローカル live テスト：
@@ -56,6 +59,8 @@ npm test
 ```bash
 npm run test:live
 ```
+
+`npm run doctor` は、インストール済み CMP plugin、browser/evaluate 設定、native command 設定、チャンネル allowlist、有効化 platform、gateway 状態、直近 run trace を確認します。
 
 ## 現在の synthesis runtime
 

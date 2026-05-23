@@ -38,6 +38,8 @@ npm run install:local
 openclaw gateway restart
 ```
 
+本機 installer 會保留既有的 `~/.openclaw/skills/cmp/config/state.json`、`platforms.json` 與 `~/.openclaw/skills/cmp/logs`，因此 provider 開關、本機平台設定與近期診斷紀錄不會因更新 repo 被覆蓋。
+
 手動複製：
 - `extensions/cmp` -> `~/.openclaw/extensions/cmp`
 - `skills/cmp` -> `~/.openclaw/skills/cmp`
@@ -49,6 +51,7 @@ Smoke test：
 
 ```bash
 npm test
+npm run doctor
 ```
 
 本機 live 測試：
@@ -56,6 +59,8 @@ npm test
 ```bash
 npm run test:live
 ```
+
+`npm run doctor` 會檢查已安裝的 CMP plugin、browser/evaluate 設定、native command 設定、頻道 allowlist、已啟用平台、gateway 狀態與近期 run trace。
 
 ## 目前 synthesis runtime
 

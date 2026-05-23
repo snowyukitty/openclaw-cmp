@@ -2,6 +2,18 @@
 
 All notable changes to `openclaw-cmp` will be documented in this file.
 
+## v0.3.2 - 2026-05-23
+
+### Added
+
+- Added `npm run doctor` as the standard repository entry point for CMP diagnostics.
+
+### Changed
+
+- Local installer now preserves existing `~/.openclaw/skills/cmp/config/state.json`, `platforms.json`, and `~/.openclaw/skills/cmp/logs` during repo updates.
+- Shared skill helpers are copied into the existing `_shared` directory instead of replacing the whole directory.
+- Updated English, Traditional Chinese, and Japanese docs with doctor and safer-install guidance.
+
 ## v0.3.1 - 2026-05-23
 
 ### Changed
