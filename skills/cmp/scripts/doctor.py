@@ -67,7 +67,9 @@ def summarize_channel_auth(config: dict) -> list[tuple[str, bool, str]]:
     for guild in guilds.values():
         channels_cfg = (guild or {}).get("channels", {}) or {}
         for channel_id, channel_cfg in channels_cfg.items():
-            if (channel_cfg or {}).get("allow") is True:
+            # In current OpenClaw configs, presence in guilds.<id>.channels is
+            # the allowlist entry; allow=false is the explicit opt-out shape.
+            if (channel_cfg or {}).get("allow") is not False:
                 allowed_channels.append(str(channel_id))
     discord_ok = discord_policy != "allowlist" or bool(allowed_channels)
     results.append(("discord channel allowlist", discord_ok, f"groupPolicy={discord_policy}, allowedChannels={len(allowed_channels)}"))

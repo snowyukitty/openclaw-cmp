@@ -9,6 +9,10 @@ All notable changes to `openclaw-cmp` will be documented in this file.
 - Renamed the second-pass `Best Combined Answer` trace path from `claude_direct_answer_*` to `rich_direct_answer_*`. The pass uses GitHub Copilot GPT-4.1, so the new event names describe the role of the pass instead of implying a Claude/provider dependency.
 - Updated English, Traditional Chinese, and Japanese docs to document the new trace naming.
 
+### Fixed
+
+- Updated the CMP doctor so Discord allowlisted guild channels count as allowed when the channel is present in `guilds.<id>.channels` and not explicitly set to `allow: false`.
+
 ## v0.3.0 - 2026-05-16
 
 ### Changed
