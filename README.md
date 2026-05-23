@@ -74,7 +74,7 @@ npm run install:local
 openclaw gateway restart
 ```
 
-The local installer preserves existing `~/.openclaw/skills/cmp/config/state.json`, `platforms.json`, and `~/.openclaw/skills/cmp/logs`, so enabled-platform state, local platform tuning, and recent diagnostics survive repo updates.
+The local installer preserves existing `~/.openclaw/skills/cmp/config/state.json`, `platforms.json`, `~/.openclaw/skills/cmp/logs`, and `~/.openclaw/extensions/cmp/.git` when present, so enabled-platform state, local platform tuning, recent diagnostics, and extension working-tree metadata survive repo updates.
 
 Manual copy:
 - `extensions/cmp` -> `~/.openclaw/extensions/cmp`

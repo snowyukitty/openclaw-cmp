@@ -11,6 +11,7 @@ All notable changes to `openclaw-cmp` will be documented in this file.
 ### Changed
 
 - Local installer now preserves existing `~/.openclaw/skills/cmp/config/state.json`, `platforms.json`, and `~/.openclaw/skills/cmp/logs` during repo updates.
+- Local installer preserves `~/.openclaw/extensions/cmp/.git` when present so extension working-tree metadata is not removed by reinstall.
 - Shared skill helpers are copied into the existing `_shared` directory instead of replacing the whole directory.
 - Updated English, Traditional Chinese, and Japanese docs with doctor and safer-install guidance.
 

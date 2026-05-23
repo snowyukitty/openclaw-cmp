@@ -38,7 +38,7 @@ npm run install:local
 openclaw gateway restart
 ```
 
-ローカル installer は既存の `~/.openclaw/skills/cmp/config/state.json`、`platforms.json`、`~/.openclaw/skills/cmp/logs` を保持するため、provider の有効化状態、ローカル調整値、直近の診断ログは repo 更新で上書きされません。
+ローカル installer は既存の `~/.openclaw/skills/cmp/config/state.json`、`platforms.json`、`~/.openclaw/skills/cmp/logs`、および存在する場合は `~/.openclaw/extensions/cmp/.git` を保持するため、provider の有効化状態、ローカル調整値、直近の診断ログ、extension working-tree metadata は repo 更新で上書きされません。
 
 手動コピー：
 - `extensions/cmp` -> `~/.openclaw/extensions/cmp`

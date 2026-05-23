@@ -24,12 +24,23 @@ if [ -d "${TARGET_HOME}/skills/cmp/logs" ]; then
   cp -R "${TARGET_HOME}/skills/cmp/logs/." "${TMP_DIR}/cmp-logs/"
 fi
 
+if [ -d "${TARGET_HOME}/extensions/cmp/.git" ]; then
+  mkdir -p "${TMP_DIR}/cmp-extension"
+  cp -R "${TARGET_HOME}/extensions/cmp/.git" "${TMP_DIR}/cmp-extension/.git"
+fi
+
 rm -rf "${TARGET_HOME}/extensions/cmp"
 rm -rf "${TARGET_HOME}/skills/cmp"
 
 cp -R "${ROOT}/extensions/cmp" "${TARGET_HOME}/extensions/"
 cp -R "${ROOT}/skills/cmp" "${TARGET_HOME}/skills/"
 cp -R "${ROOT}/skills/_shared/." "${TARGET_HOME}/skills/_shared/"
+
+if [ -d "${TMP_DIR}/cmp-extension/.git" ]; then
+  rm -rf "${TARGET_HOME}/extensions/cmp/.git"
+  cp -R "${TMP_DIR}/cmp-extension/.git" "${TARGET_HOME}/extensions/cmp/.git"
+  echo "Preserved existing extensions/cmp/.git"
+fi
 
 for file in state.json platforms.json; do
   if [ -f "${TMP_DIR}/cmp-config/${file}" ]; then

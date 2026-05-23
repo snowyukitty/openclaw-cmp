@@ -38,7 +38,7 @@ npm run install:local
 openclaw gateway restart
 ```
 
-本機 installer 會保留既有的 `~/.openclaw/skills/cmp/config/state.json`、`platforms.json` 與 `~/.openclaw/skills/cmp/logs`，因此 provider 開關、本機平台設定與近期診斷紀錄不會因更新 repo 被覆蓋。
+本機 installer 會保留既有的 `~/.openclaw/skills/cmp/config/state.json`、`platforms.json`、`~/.openclaw/skills/cmp/logs`，以及存在時的 `~/.openclaw/extensions/cmp/.git`，因此 provider 開關、本機平台設定、近期診斷紀錄與 extension working-tree metadata 不會因更新 repo 被覆蓋。
 
 手動複製：
 - `extensions/cmp` -> `~/.openclaw/extensions/cmp`
